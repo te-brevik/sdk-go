@@ -3,10 +3,11 @@ package nats
 import (
 	"context"
 	"fmt"
+
 	"github.com/cloudevents/sdk-go/pkg/cloudevents"
 	context2 "github.com/cloudevents/sdk-go/pkg/cloudevents/context"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport"
-	"github.com/nats-io/go-nats"
+	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 )
 
@@ -18,11 +19,13 @@ const (
 	TransportName = "NATS"
 )
 
-// Transport acts as both a http client and a http handler.
+// Transport acts as both a NATS client and a NATS handler.
 type Transport struct {
-	Encoding Encoding
-	Conn     *nats.Conn
-	Subject  string
+	Encoding    Encoding
+	Conn        *nats.Conn
+	ConnOptions []nats.Option
+	NatsURL     string
+	Subject     string
 
 	sub *nats.Subscription
 
@@ -35,20 +38,32 @@ type Transport struct {
 }
 
 // New creates a new NATS transport.
-func New(natsServer, subject string, opts ...Option) (*Transport, error) {
-	conn, err := nats.Connect(natsServer)
+func New(natsURL, subject string, opts ...Option) (*Transport, error) {
+	t := &Transport{
+		Subject:     subject,
+		NatsURL:     natsURL,
+		ConnOptions: []nats.Option{},
+	}
+
+	err := t.applyOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
-	t := &Transport{
-		Conn:    conn,
-		Subject: subject,
-	}
-	if err := t.applyOptions(opts...); err != nil {
+
+	err = t.connect()
+	if err != nil {
 		return nil, err
 	}
 
 	return t, nil
+}
+
+func (t *Transport) connect() error {
+	var err error
+
+	t.Conn, err = nats.Connect(t.NatsURL, t.ConnOptions...)
+
+	return err
 }
 
 func (t *Transport) applyOptions(opts ...Option) error {
@@ -69,6 +84,8 @@ func (t *Transport) loadCodec() bool {
 			t.codec = &CodecV02{Encoding: t.Encoding}
 		case StructuredV03:
 			t.codec = &CodecV03{Encoding: t.Encoding}
+		case StructuredV1:
+			t.codec = &CodecV1{Encoding: t.Encoding}
 		default:
 			return false
 		}
@@ -77,21 +94,22 @@ func (t *Transport) loadCodec() bool {
 }
 
 // Send implements Transport.Send
-func (t *Transport) Send(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, error) {
+func (t *Transport) Send(ctx context.Context, event cloudevents.Event) (context.Context, *cloudevents.Event, error) {
+	// TODO populate response context properly.
 	if ok := t.loadCodec(); !ok {
-		return nil, fmt.Errorf("unknown encoding set on transport: %d", t.Encoding)
+		return ctx, nil, fmt.Errorf("unknown encoding set on transport: %d", t.Encoding)
 	}
 
-	msg, err := t.codec.Encode(event)
+	msg, err := t.codec.Encode(ctx, event)
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 
 	if m, ok := msg.(*Message); ok {
-		return nil, t.Conn.Publish(t.Subject, m.Body)
+		return ctx, nil, t.Conn.Publish(t.Subject, m.Body)
 	}
 
-	return nil, fmt.Errorf("failed to encode Event into a Message")
+	return ctx, nil, fmt.Errorf("failed to encode Event into a Message")
 }
 
 // SetReceiver implements Transport.SetReceiver
@@ -111,7 +129,7 @@ func (t *Transport) HasConverter() bool {
 
 // StartReceiver implements Transport.StartReceiver
 // NOTE: This is a blocking call.
-func (t *Transport) StartReceiver(ctx context.Context) error {
+func (t *Transport) StartReceiver(ctx context.Context) (err error) {
 	if t.Conn == nil {
 		return fmt.Errorf("no active nats connection")
 	}
@@ -129,14 +147,13 @@ func (t *Transport) StartReceiver(ctx context.Context) error {
 		return fmt.Errorf("subject required for nats listen")
 	}
 
-	var err error
 	// Simple Async Subscriber
 	t.sub, err = t.Conn.Subscribe(t.Subject, func(m *nats.Msg) {
 		logger := context2.LoggerFrom(ctx)
 		msg := &Message{
 			Body: m.Data,
 		}
-		event, err := t.codec.Decode(msg)
+		event, err := t.codec.Decode(ctx, msg)
 		// If codec returns and error, try with the converter if it is set.
 		if err != nil && t.HasConverter() {
 			event, err = t.Converter.Convert(ctx, msg, err)
@@ -153,7 +170,10 @@ func (t *Transport) StartReceiver(ctx context.Context) error {
 	})
 	defer func() {
 		if t.sub != nil {
-			t.sub.Unsubscribe() // TODO: create an error channel to pass this up
+			err2 := t.sub.Unsubscribe()
+			if err != nil {
+				err = err2 // Set the returned error if not already set.
+			}
 			t.sub = nil
 		}
 	}()

@@ -1,29 +1,48 @@
 package pubsub
 
-import "github.com/cloudevents/sdk-go/pkg/cloudevents"
+import (
+	"context"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents"
+)
 
 // Encoding to use for pubsub transport.
 type Encoding int32
 
-type EncodingSelector func(e cloudevents.Event) Encoding
+type EncodingSelector func(context.Context, cloudevents.Event) Encoding
 
 const (
 	// Default allows pubsub transport implementation to pick.
 	Default Encoding = iota
 	// BinaryV03 is Binary CloudEvents spec v0.3.
 	BinaryV03
+	// BinaryV1 is Binary CloudEvents spec v1.0.
+	BinaryV1
 	// StructuredV03 is Structured CloudEvents spec v0.3.
 	StructuredV03
+	// StructuredV1 is Structured CloudEvents spec v1.0.
+	StructuredV1
+
 	// Unknown is unknown.
 	Unknown
+
+	// Binary is used for Context Based Encoding Selections to use the
+	// DefaultBinaryEncodingSelectionStrategy
+	Binary = "binary"
+
+	// Structured is used for Context Based Encoding Selections to use the
+	// DefaultStructuredEncodingSelectionStrategy
+	Structured = "structured"
 )
 
 // DefaultBinaryEncodingSelectionStrategy implements a selection process for
 // which binary encoding to use based on spec version of the event.
-func DefaultBinaryEncodingSelectionStrategy(e cloudevents.Event) Encoding {
+func DefaultBinaryEncodingSelectionStrategy(ctx context.Context, e cloudevents.Event) Encoding {
 	switch e.SpecVersion() {
 	case cloudevents.CloudEventsVersionV01, cloudevents.CloudEventsVersionV02, cloudevents.CloudEventsVersionV03:
 		return BinaryV03
+	case cloudevents.CloudEventsVersionV1:
+		return BinaryV1
 	}
 	// Unknown version, return Default.
 	return Default
@@ -31,10 +50,12 @@ func DefaultBinaryEncodingSelectionStrategy(e cloudevents.Event) Encoding {
 
 // DefaultStructuredEncodingSelectionStrategy implements a selection process
 // for which structured encoding to use based on spec version of the event.
-func DefaultStructuredEncodingSelectionStrategy(e cloudevents.Event) Encoding {
+func DefaultStructuredEncodingSelectionStrategy(ctx context.Context, e cloudevents.Event) Encoding {
 	switch e.SpecVersion() {
 	case cloudevents.CloudEventsVersionV01, cloudevents.CloudEventsVersionV02, cloudevents.CloudEventsVersionV03:
 		return StructuredV03
+	case cloudevents.CloudEventsVersionV1:
+		return StructuredV1
 	}
 	// Unknown version, return Default.
 	return Default
@@ -47,11 +68,11 @@ func (e Encoding) String() string {
 		return "Default Encoding " + e.Version()
 
 	// Binary
-	case BinaryV03:
+	case BinaryV03, BinaryV1:
 		return "Binary Encoding " + e.Version()
 
 	// Structured
-	case StructuredV03:
+	case StructuredV03, StructuredV1:
 		return "Structured Encoding " + e.Version()
 
 	default:
@@ -64,15 +85,30 @@ func (e Encoding) Version() string {
 	switch e {
 
 	// Version 0.2
-	case Default: // <-- Move when a new default is wanted.
-		fallthrough
-
 	// Version 0.3
-	case StructuredV03:
+	case Default, BinaryV03, StructuredV03:
 		return "v0.3"
+
+		// Version 1.0
+	case BinaryV1, StructuredV1:
+		return "v1.0"
 
 	// Unknown
 	default:
 		return "Unknown"
+	}
+}
+
+// Name creates a string to represent the the codec name.
+func (e Encoding) Name() string {
+	switch e {
+	case Default:
+		return Binary
+	case BinaryV03, BinaryV1:
+		return Binary
+	case StructuredV03, StructuredV1:
+		return Structured
+	default:
+		return Binary
 	}
 }

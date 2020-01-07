@@ -1,14 +1,15 @@
 package http_test
 
 import (
-	"encoding/json"
+	"context"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/cloudevents/sdk-go/pkg/cloudevents"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport/http"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 	"github.com/google/go-cmp/cmp"
-	"net/url"
-	"testing"
-	"time"
 )
 
 func TestCodecV03_Encode(t *testing.T) {
@@ -42,7 +43,6 @@ func TestCodecV03_Encode(t *testing.T) {
 					"Ce-Id":          {"ABC-123"},
 					"Ce-Type":        {"com.example.test"},
 					"Ce-Source":      {"http://example.com/source"},
-					"Content-Type":   {"application/json"},
 				},
 			},
 		},
@@ -74,20 +74,20 @@ func TestCodecV03_Encode(t *testing.T) {
 					"Ce-Source":      {"http://example.com/source"},
 					"Ce-Subject":     {"resource"},
 					"Ce-Schemaurl":   {"http://example.com/schema"},
-					"Ce-Test":        {`"extended"`},
+					"Ce-Test":        {"extended"},
 					"Content-Type":   {"application/json"},
 				},
 				Body: []byte(`{"hello":"world"}`),
 			},
 		},
 		"simple v0.3 binary": {
-			codec: http.CodecV03{Encoding: http.BinaryV03},
+			codec: http.CodecV03{DefaultEncoding: http.BinaryV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV03(),
 			},
 			want: &http.Message{
 				Header: map[string][]string{
@@ -95,12 +95,11 @@ func TestCodecV03_Encode(t *testing.T) {
 					"Ce-Id":          {"ABC-123"},
 					"Ce-Type":        {"com.example.test"},
 					"Ce-Source":      {"http://example.com/source"},
-					"Content-Type":   {"application/json"},
 				},
 			},
 		},
 		"full v0.3 binary": {
-			codec: http.CodecV03{Encoding: http.BinaryV03},
+			codec: http.CodecV03{DefaultEncoding: http.BinaryV03},
 			event: cloudevents.Event{
 				Context: &cloudevents.EventContextV03{
 					ID:              "ABC-123",
@@ -135,7 +134,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					"Ce-Source":      {"http://example.com/source"},
 					"Ce-Subject":     {"resource"},
 					"Ce-Schemaurl":   {"http://example.com/schema"},
-					"Ce-Test":        {`"extended"`},
+					"Ce-Test":        {"extended"},
 					"Ce-Asmap-A":     {`"apple"`},
 					"Ce-Asmap-B":     {`"banana"`},
 					"Ce-Asmap-C":     {`{"d":"dog","e":"eel"}`},
@@ -145,9 +144,9 @@ func TestCodecV03_Encode(t *testing.T) {
 			},
 		},
 		"full v0.3 binary base64": {
-			codec: http.CodecV03{Encoding: http.BinaryV03},
+			codec: http.CodecV03{DefaultEncoding: http.BinaryV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					ID:                  "ABC-123",
 					Time:                &now,
 					Type:                "com.example.test",
@@ -167,7 +166,7 @@ func TestCodecV03_Encode(t *testing.T) {
 							},
 						},
 					},
-				},
+				}.AsV03(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -181,7 +180,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					"Ce-Source":              {"http://example.com/source"},
 					"Ce-Subject":             {"resource"},
 					"Ce-Schemaurl":           {"http://example.com/schema"},
-					"Ce-Test":                {`"extended"`},
+					"Ce-Test":                {"extended"},
 					"Ce-Asmap-A":             {`"apple"`},
 					"Ce-Asmap-B":             {`"banana"`},
 					"Ce-Asmap-C":             {`{"d":"dog","e":"eel"}`},
@@ -192,13 +191,13 @@ func TestCodecV03_Encode(t *testing.T) {
 			},
 		},
 		"simple v0.3 structured": {
-			codec: http.CodecV03{Encoding: http.StructuredV03},
+			codec: http.CodecV03{DefaultEncoding: http.StructuredV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV03(),
 			},
 			want: &http.Message{
 				Header: map[string][]string{
@@ -206,20 +205,19 @@ func TestCodecV03_Encode(t *testing.T) {
 				},
 				Body: func() []byte {
 					body := map[string]interface{}{
-						"datacontenttype": "application/json",
-						"specversion":     "0.3",
-						"id":              "ABC-123",
-						"type":            "com.example.test",
-						"source":          "http://example.com/source",
+						"specversion": "0.3",
+						"id":          "ABC-123",
+						"type":        "com.example.test",
+						"source":      "http://example.com/source",
 					}
 					return toBytes(body)
 				}(),
 			},
 		},
 		"full v0.3 structured": {
-			codec: http.CodecV03{Encoding: http.StructuredV03},
+			codec: http.CodecV03{DefaultEncoding: http.StructuredV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					ID:              "ABC-123",
 					Time:            &now,
 					Type:            "com.example.test",
@@ -230,7 +228,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -259,9 +257,9 @@ func TestCodecV03_Encode(t *testing.T) {
 			},
 		},
 		"full v0.3 structured base64": {
-			codec: http.CodecV03{Encoding: http.StructuredV03},
+			codec: http.CodecV03{DefaultEncoding: http.StructuredV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					ID:                  "ABC-123",
 					Time:                &now,
 					Type:                "com.example.test",
@@ -273,7 +271,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -304,7 +302,7 @@ func TestCodecV03_Encode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Encode(tc.event)
+			got, err := tc.codec.Encode(context.TODO(), tc.event)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {
@@ -368,7 +366,6 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:          *source,
 					ID:              "ABC-123",
 				},
-				DataEncoded: true,
 			},
 		},
 		"full v0.3 binary": {
@@ -481,7 +478,6 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:      *source,
 					ID:          "ABC-123",
 				},
-				DataEncoded: true,
 			},
 		},
 		"full v0.3 structured": {
@@ -506,7 +502,7 @@ func TestCodecV03_Decode(t *testing.T) {
 				}),
 			},
 			want: &cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					SpecVersion:     cloudevents.CloudEventsVersionV03,
 					ID:              "ABC-123",
 					Time:            &now,
@@ -516,9 +512,9 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:          *source,
 					Subject:         &subject,
 					Extensions: map[string]interface{}{
-						"test": json.RawMessage(`"extended"`),
+						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data: toBytes(map[string]interface{}{
 					"hello": "world",
 				}),
@@ -546,7 +542,7 @@ func TestCodecV03_Decode(t *testing.T) {
 				}),
 			},
 			want: &cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					SpecVersion:         cloudevents.CloudEventsVersionV03,
 					ID:                  "ABC-123",
 					Time:                &now,
@@ -557,9 +553,9 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:              *source,
 					Subject:             &subject,
 					Extensions: map[string]interface{}{
-						"test": json.RawMessage(`"extended"`),
+						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data:        []byte(`"eyJoZWxsbyI6IndvcmxkIn0="`), // TODO: structured comes in quoted. Unquote?
 				DataEncoded: true,
 			},
@@ -584,14 +580,13 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:          *source,
 					ID:              "ABC-123",
 				},
-				DataEncoded: true,
 			},
 		},
 	}
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Decode(tc.msg)
+			got, err := tc.codec.Decode(context.TODO(), tc.msg)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {

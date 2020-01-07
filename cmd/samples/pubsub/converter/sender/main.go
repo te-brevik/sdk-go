@@ -1,13 +1,22 @@
 package main
 
 import (
-	"cloud.google.com/go/pubsub"
 	"context"
 	"encoding/json"
-	"github.com/kelseyhightower/envconfig"
 	"log"
 	"os"
+
+	"cloud.google.com/go/pubsub"
+	"github.com/kelseyhightower/envconfig"
 )
+
+/*
+
+To view: gcloud pubsub subscriptions pull --auto-ack foo
+
+To post: gcloud pubsub topics publish demo_cloudevents --message '{"id":123,"message":"hi from the terminal"}'
+
+*/
 
 type envConfig struct {
 	ProjectID string `envconfig:"GOOGLE_CLOUD_PROJECT" required:"true"`
@@ -68,11 +77,3 @@ func main() {
 		log.Printf("Could not publish message: %v", err)
 	}
 }
-
-/*
-
-To view: gcloud pubsub subscriptions pull --auto-ack foo
-
-To post: gcloud pubsub topics publish demo_cloudevents --message '{"id":123,"message":"hi from the terminal"}'
-
-*/

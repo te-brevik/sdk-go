@@ -2,10 +2,11 @@ package types_test
 
 import (
 	"encoding/xml"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
-	"github.com/google/go-cmp/cmp"
 	"net/url"
 	"testing"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseURLRef(t *testing.T) {
@@ -40,6 +41,7 @@ func TestParseURLRef(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			got := types.ParseURLRef(tc.t)
@@ -70,6 +72,7 @@ func TestJsonMarshalURLRef(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			var got []byte
@@ -105,6 +108,7 @@ func TestXMLMarshalURLRef(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			var got []byte
@@ -150,6 +154,7 @@ func TestJsonUnmarshalURLRef(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			got := &types.URLRef{}
@@ -206,6 +211,7 @@ func TestXMLUnmarshalURLRef(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			got := &types.URLRef{}
@@ -248,13 +254,14 @@ func TestURLRefString(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
 
 			tt := types.ParseURLRef(tc.t)
 			got := tt.String()
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Logf("got: %s", string(got))
+				t.Logf("got: %s", got)
 				t.Errorf("unexpected string (-want, +got) = %v", diff)
 			}
 		})

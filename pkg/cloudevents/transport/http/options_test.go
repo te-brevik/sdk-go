@@ -1,14 +1,17 @@
 package http
 
 import (
+	"context"
 	"fmt"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestWithTarget(t *testing.T) {
@@ -316,10 +319,15 @@ func TestWithPort(t *testing.T) {
 				Port: intptr(8181),
 			},
 		},
-		"invalid port": {
+		"invalid port, low": {
 			t:       &Transport{},
 			port:    -1,
 			wantErr: `http port option was given an invalid port: -1`,
+		},
+		"invalid port, high": {
+			t:       &Transport{},
+			port:    65536,
+			wantErr: `http port option was given an invalid port: 65536`,
 		},
 		"nil transport": {
 			wantErr: `http port option can not set nil transport`,
@@ -348,6 +356,55 @@ func TestWithPort(t *testing.T) {
 				t.Errorf("unexpected (-want, +got) = %v", diff)
 			}
 		})
+	}
+}
+
+// Force a transport to close its server/listener by cancelling StartReceiver
+func forceClose(tr *Transport) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = tr.StartReceiver(ctx) }()
+	cancel()
+}
+
+func TestWithPort0(t *testing.T) {
+	testCases := map[string]func() (*Transport, error){
+		"WithPort0": func() (*Transport, error) { return New(WithPort(0)) },
+		"SetPort0":  func() (*Transport, error) { return &Transport{Port: new(int)}, nil },
+	}
+	for name, f := range testCases {
+		t.Run(name, func(t *testing.T) {
+			tr, err := f()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { forceClose(tr) }()
+			port := tr.GetPort()
+			if port <= 0 {
+				t.Error("no dynamic port")
+			}
+			if d := cmp.Diff(port, *tr.Port); d != "" {
+				t.Error(d)
+			}
+		})
+	}
+}
+
+func TestWithListener(t *testing.T) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, err := New(WithListener(l))
+	defer func() { forceClose(tr) }()
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := tr.GetPort()
+	if port <= 0 {
+		t.Error("no dynamic port")
+	}
+	if d := cmp.Diff(port, l.Addr().(*net.TCPAddr).Port); d != "" {
+		t.Error(d)
 	}
 }
 
@@ -446,7 +503,7 @@ func TestWithEncoding(t *testing.T) {
 
 func TestWithDefaultEncodingSelector(t *testing.T) {
 
-	fn := func(e cloudevents.Event) Encoding {
+	fn := func(ctx context.Context, e cloudevents.Event) Encoding {
 		return Default
 	}
 

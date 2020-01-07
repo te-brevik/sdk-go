@@ -1,6 +1,7 @@
 package stan_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"testing"
@@ -29,16 +30,15 @@ func TestCodecV02_Encode(t *testing.T) {
 		"simple v2 default": {
 			codec: nats.CodecV02{},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{
+				Context: cloudevents.EventContextV02{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV02(),
 			},
 			want: &nats.Message{
 				Body: func() []byte {
 					body := map[string]interface{}{
-						"contenttype": "application/json",
 						"specversion": "0.2",
 						"id":          "ABC-123",
 						"type":        "com.example.test",
@@ -51,7 +51,7 @@ func TestCodecV02_Encode(t *testing.T) {
 		"full v2 default": {
 			codec: nats.CodecV02{},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{
+				Context: cloudevents.EventContextV02{
 					ID:          "ABC-123",
 					Time:        &now,
 					Type:        "com.example.test",
@@ -61,7 +61,7 @@ func TestCodecV02_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV02(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -88,16 +88,15 @@ func TestCodecV02_Encode(t *testing.T) {
 		"simple v2 structured": {
 			codec: nats.CodecV02{Encoding: nats.StructuredV02},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{
+				Context: cloudevents.EventContextV02{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV02(),
 			},
 			want: &nats.Message{
 				Body: func() []byte {
 					body := map[string]interface{}{
-						"contenttype": "application/json",
 						"specversion": "0.2",
 						"id":          "ABC-123",
 						"type":        "com.example.test",
@@ -110,7 +109,7 @@ func TestCodecV02_Encode(t *testing.T) {
 		"full v2 structured": {
 			codec: nats.CodecV02{Encoding: nats.StructuredV02},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{
+				Context: cloudevents.EventContextV02{
 					ID:          "ABC-123",
 					Time:        &now,
 					Type:        "com.example.test",
@@ -120,7 +119,7 @@ func TestCodecV02_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV02(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -148,7 +147,7 @@ func TestCodecV02_Encode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Encode(tc.event)
+			got, err := tc.codec.Encode(context.TODO(), tc.event)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {
@@ -208,7 +207,6 @@ func TestCodecV02_Decode(t *testing.T) {
 					Source:      *source,
 					ID:          "ABC-123",
 				},
-				DataEncoded: true,
 			},
 		},
 		"full v2 structured": {
@@ -251,7 +249,7 @@ func TestCodecV02_Decode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Decode(tc.msg)
+			got, err := tc.codec.Decode(context.TODO(), tc.msg)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {

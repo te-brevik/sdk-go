@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -31,7 +32,7 @@ func startTestServer(handler http.Handler) (*http.Server, error) {
 		Addr:    listener.Addr().String(),
 		Handler: handler,
 	}
-	go server.Serve(listener)
+	go func() { _ = server.Serve(listener) }()
 	return server, nil
 }
 
@@ -105,6 +106,7 @@ func TestStableConnectionsToSingleHost(t *testing.T) {
 		Context: &cloudevents.EventContextV02{
 			SpecVersion: cloudevents.CloudEventsVersionV02,
 			Type:        "test.event",
+			ID:          "abc-123",
 			Source:      *types.ParseURLRef("test"),
 		},
 	}
@@ -114,9 +116,13 @@ func TestStableConnectionsToSingleHost(t *testing.T) {
 	duration := 1 * time.Second
 	var sent uint64
 	err = doConcurrently(concurrency, duration, func() error {
-		_, err := ceClient.Send(ctx, event)
+		rctx, _, err := ceClient.Send(ctx, event)
 		if err != nil {
 			return fmt.Errorf("unexpected error sending CloudEvent: %v", err.Error())
+		}
+		trctx := cehttp.TransportContextFrom(rctx)
+		if trctx.StatusCode != http.StatusAccepted {
+			return fmt.Errorf("unexpected status code: want %d, got %d", http.StatusAccepted, trctx.StatusCode)
 		}
 		atomic.AddUint64(&sent, 1)
 		return nil
@@ -130,13 +136,11 @@ func TestStableConnectionsToSingleHost(t *testing.T) {
 	if newConnectionCount > uint64(concurrency*2) {
 		t.Errorf("too many new connections opened: expected %d, got %d", concurrency, newConnectionCount)
 	}
-	t.Log("sent ", sent)
 }
 
 func TestMiddleware(t *testing.T) {
 	testCases := map[string]struct {
 		middleware []string
-		want       string
 	}{
 		"none": {},
 		"one": {
@@ -195,7 +199,7 @@ func makeRequestToServer(t *testing.T, tr *cehttp.Transport, responseText string
 	// Start the server.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go tr.StartReceiver(ctx)
+	go func() { _ = tr.StartReceiver(ctx) }()
 
 	// Give some time for the receiver to start. One second was chosen arbitrarily.
 	time.Sleep(time.Second)
@@ -221,4 +225,45 @@ type namedHandler struct {
 func (h *namedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(h.name))
 	h.next.ServeHTTP(w, r)
+}
+
+func TestServeHTTPSpecVersion(t *testing.T) {
+	tests := []struct {
+		specVersion    string
+		expectedStatus int
+	}{
+		{
+			// Missing specVersion -> HTTP 400
+			specVersion:    "",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			// Valid request
+			specVersion:    "0.3",
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			// Future specVersion -> HTTP 400
+			specVersion:    "999999.99",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.specVersion, func(t *testing.T) {
+			transport := &cehttp.Transport{}
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("ce-specversion", test.specVersion)
+			w := httptest.NewRecorder()
+
+			transport.ServeHTTP(w, req)
+
+			actualStatus := w.Result().StatusCode
+			if actualStatus != test.expectedStatus {
+				t.Errorf("actual status (%d) != expected status (%d)", actualStatus, test.expectedStatus)
+				t.Errorf("response body: %s", w.Body.String())
+			}
+		})
+	}
+
 }

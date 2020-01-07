@@ -16,7 +16,7 @@ var _ transport.Transport = (*Transport)(nil)
 
 const (
 	// TransportName is the name of this transport.
-	TransportName = "NATS"
+	TransportName = "STAN"
 )
 
 // Transport acts as both a http client and a http handler.
@@ -70,6 +70,8 @@ func (t *Transport) loadCodec() bool {
 			t.codec = &CodecV02{Encoding: t.Encoding}
 		case StructuredV03:
 			t.codec = &CodecV03{Encoding: t.Encoding}
+		case StructuredV1:
+			t.codec = &CodecV1{Encoding: t.Encoding}
 		default:
 			return false
 		}
@@ -78,21 +80,22 @@ func (t *Transport) loadCodec() bool {
 }
 
 // Send implements Transport.Send
-func (t *Transport) Send(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, error) {
+func (t *Transport) Send(ctx context.Context, event cloudevents.Event) (context.Context, *cloudevents.Event, error) {
+	// TODO populate response context properly.
 	if ok := t.loadCodec(); !ok {
-		return nil, fmt.Errorf("unknown encoding set on transport: %d", t.Encoding)
+		return ctx, nil, fmt.Errorf("unknown encoding set on transport: %d", t.Encoding)
 	}
 
-	msg, err := t.codec.Encode(event)
+	msg, err := t.codec.Encode(ctx, event)
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 
 	if m, ok := msg.(*Message); ok {
-		return nil, t.Conn.Publish(t.Subject, m.Body)
+		return ctx, nil, t.Conn.Publish(t.Subject, m.Body)
 	}
 
-	return nil, fmt.Errorf("failed to encode Event into a Message")
+	return ctx, nil, fmt.Errorf("failed to encode Event into a Message")
 }
 
 // SetReceiver implements Transport.SetReceiver
@@ -112,7 +115,7 @@ func (t *Transport) HasConverter() bool {
 
 // StartReceiver implements Transport.StartReceiver
 // NOTE: This is a blocking call.
-func (t *Transport) StartReceiver(ctx context.Context) error {
+func (t *Transport) StartReceiver(ctx context.Context) (err error) {
 	if t.Conn == nil {
 		return fmt.Errorf("no active nats connection")
 	}
@@ -130,14 +133,14 @@ func (t *Transport) StartReceiver(ctx context.Context) error {
 		return fmt.Errorf("subject required for nats listen")
 	}
 
-	var err error
+	//var err error
 	// Simple Async Subscriber
 	t.sub, err = t.Conn.Subscribe(t.Subject, func(m *stan.Msg) {
 		logger := context2.LoggerFrom(ctx)
 		msg := &Message{
 			Body: m.Data,
 		}
-		event, err := t.codec.Decode(msg)
+		event, err := t.codec.Decode(ctx, msg)
 		// If codec returns and error, try with the converter if it is set.
 		if err != nil && t.HasConverter() {
 			event, err = t.Converter.Convert(ctx, msg, err)
@@ -146,7 +149,6 @@ func (t *Transport) StartReceiver(ctx context.Context) error {
 			logger.Errorw("failed to decode message", zap.Error(err)) // TODO: create an error channel to pass this up
 			return
 		}
-
 		// TODO: I do not know enough about NATS to implement reply.
 		// For now, NATS does not support reply.
 		if err := t.Receiver.Receive(context.TODO(), *event, nil); err != nil {

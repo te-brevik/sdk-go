@@ -31,13 +31,15 @@ func main() {
 		}
 
 		var version string
-		switch i % 3 {
+		switch i % 4 {
 		case 0:
 			version = cloudevents.VersionV01
 		case 1:
 			version = cloudevents.VersionV02
 		case 2:
 			version = cloudevents.VersionV03
+		case 3:
+			version = cloudevents.VersionV1
 		}
 
 		event := cloudevents.NewEvent(version)
@@ -45,7 +47,7 @@ func main() {
 		event.SetSource("https://github.com/cloudevents/sdk-go/cmd/samples/sender")
 		event.Data = data
 
-		if resp, err := c.Send(ctx, event); err != nil {
+		if _, resp, err := c.Send(ctx, event); err != nil {
 			log.Printf("failed to send: %v", err)
 		} else if resp != nil {
 			fmt.Printf("got back a response: \n%s", resp)

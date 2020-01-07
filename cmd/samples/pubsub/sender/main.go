@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/cloudevents/sdk-go"
-	cloudeventspubsub "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/pubsub"
+	cepubsub "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/pubsub"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -29,9 +29,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	t, err := cloudeventspubsub.New(context.Background(),
-		cloudeventspubsub.WithProjectID(env.ProjectID),
-		cloudeventspubsub.WithTopicID(env.TopicID))
+	t, err := cepubsub.New(context.Background(),
+		cepubsub.WithProjectID(env.ProjectID),
+		cepubsub.WithTopicID(env.TopicID))
 	if err != nil {
 		log.Printf("failed to create pubsub transport, %s", err.Error())
 		os.Exit(1)
@@ -42,7 +42,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	event := cloudevents.NewEvent(cloudevents.VersionV03)
+	event := cloudevents.NewEvent(cloudevents.VersionV1)
 	event.SetType("com.cloudevents.sample.sent")
 	event.SetSource("github.com/cloudevents/sdk-go/cmd/samples/pubsub/sender/")
 	_ = event.SetData(&Example{
@@ -50,7 +50,7 @@ func main() {
 		Message:  "HELLO",
 	})
 
-	_, err = c.Send(context.Background(), event)
+	_, _, err = c.Send(context.Background(), event)
 
 	if err != nil {
 		log.Printf("failed to send: %v", err)

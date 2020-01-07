@@ -1,14 +1,16 @@
 package nats_test
 
 import (
-	"encoding/json"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport/nats"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
-	"github.com/google/go-cmp/cmp"
+	"context"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents"
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport/nats"
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 )
 
 func TestCodecV03_Encode(t *testing.T) {
@@ -28,20 +30,19 @@ func TestCodecV03_Encode(t *testing.T) {
 		"simple v0.3 default": {
 			codec: nats.CodecV03{},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV03(),
 			},
 			want: &nats.Message{
 				Body: func() []byte {
 					body := map[string]interface{}{
-						"datacontenttype": "application/json",
-						"specversion":     "0.3",
-						"id":              "ABC-123",
-						"type":            "com.example.test",
-						"source":          "http://example.com/source",
+						"specversion": "0.3",
+						"id":          "ABC-123",
+						"type":        "com.example.test",
+						"source":      "http://example.com/source",
 					}
 					return toBytes(body)
 				}(),
@@ -50,7 +51,7 @@ func TestCodecV03_Encode(t *testing.T) {
 		"full v0.3 default": {
 			codec: nats.CodecV03{},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					ID:              "ABC-123",
 					Time:            &now,
 					Type:            "com.example.test",
@@ -60,7 +61,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -87,20 +88,19 @@ func TestCodecV03_Encode(t *testing.T) {
 		"simple v0.3 structured": {
 			codec: nats.CodecV03{Encoding: nats.StructuredV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					Type:   "com.example.test",
 					Source: *source,
 					ID:     "ABC-123",
-				},
+				}.AsV03(),
 			},
 			want: &nats.Message{
 				Body: func() []byte {
 					body := map[string]interface{}{
-						"datacontenttype": "application/json",
-						"specversion":     "0.3",
-						"id":              "ABC-123",
-						"type":            "com.example.test",
-						"source":          "http://example.com/source",
+						"specversion": "0.3",
+						"id":          "ABC-123",
+						"type":        "com.example.test",
+						"source":      "http://example.com/source",
 					}
 					return toBytes(body)
 				}(),
@@ -109,7 +109,7 @@ func TestCodecV03_Encode(t *testing.T) {
 		"full v0.3 structured": {
 			codec: nats.CodecV03{Encoding: nats.StructuredV03},
 			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+				Context: cloudevents.EventContextV03{
 					ID:              "ABC-123",
 					Time:            &now,
 					Type:            "com.example.test",
@@ -119,7 +119,7 @@ func TestCodecV03_Encode(t *testing.T) {
 					Extensions: map[string]interface{}{
 						"test": "extended",
 					},
-				},
+				}.AsV03(),
 				Data: map[string]interface{}{
 					"hello": "world",
 				},
@@ -147,7 +147,7 @@ func TestCodecV03_Encode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Encode(tc.event)
+			got, err := tc.codec.Encode(context.TODO(), tc.event)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {
@@ -207,7 +207,6 @@ func TestCodecV03_Decode(t *testing.T) {
 					Source:      *source,
 					ID:          "ABC-123",
 				},
-				DataEncoded: true,
 			},
 		},
 		"full v0.3 structured": {
@@ -237,7 +236,7 @@ func TestCodecV03_Decode(t *testing.T) {
 					DataContentType: cloudevents.StringOfApplicationJSON(),
 					Source:          *source,
 					Extensions: map[string]interface{}{
-						"test": json.RawMessage(`"extended"`),
+						"test": "extended",
 					},
 				},
 				Data: toBytes(map[string]interface{}{
@@ -250,7 +249,7 @@ func TestCodecV03_Decode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Decode(tc.msg)
+			got, err := tc.codec.Decode(context.TODO(), tc.msg)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {

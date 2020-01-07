@@ -1,11 +1,12 @@
 package cloudevents_test
 
 import (
-	ce "github.com/cloudevents/sdk-go/pkg/cloudevents"
-	"github.com/google/go-cmp/cmp"
 	"strings"
 	"testing"
 	"time"
+
+	ce "github.com/cloudevents/sdk-go/pkg/cloudevents"
+	"github.com/google/go-cmp/cmp"
 )
 
 type ReadWriteTest struct {
@@ -411,7 +412,7 @@ func TestEventRW_SchemaURL(t *testing.T) {
 		"nilled v01": {
 			event: func() ce.Event {
 				e := ce.New("0.1")
-				e.SetSchemaURL("should nil")
+				e.SetDataSchema("should nil")
 				return e
 			}(),
 			want: "",
@@ -419,7 +420,7 @@ func TestEventRW_SchemaURL(t *testing.T) {
 		"nilled v02": {
 			event: func() ce.Event {
 				e := ce.New("0.2")
-				e.SetSchemaURL("should nil")
+				e.SetDataSchema("should nil")
 				return e
 			}(),
 			want: "",
@@ -427,7 +428,7 @@ func TestEventRW_SchemaURL(t *testing.T) {
 		"nilled v03": {
 			event: func() ce.Event {
 				e := ce.New("0.3")
-				e.SetSchemaURL("should nil")
+				e.SetDataSchema("should nil")
 				return e
 			}(),
 			want: "",
@@ -445,8 +446,8 @@ func TestEventRW_SchemaURL(t *testing.T) {
 				validateReaderWriter(t, tc, got, err)
 			}()
 
-			tc.event.SetSchemaURL(tc.set)
-			got = tc.event.SchemaURL()
+			tc.event.SetDataSchema(tc.set)
+			got = tc.event.DataSchema()
 		})
 	}
 }
@@ -611,7 +612,7 @@ func TestEventRW_DataContentEncoding(t *testing.T) {
 			}()
 
 			tc.event.SetDataContentEncoding(tc.set)
-			got = tc.event.DataContentEncoding()
+			got = tc.event.DeprecatedDataContentEncoding()
 		})
 	}
 }

@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"encoding/json"
+
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport"
 )
 
@@ -32,7 +33,7 @@ func (m Message) CloudEventsVersion() string {
 		return ""
 	}
 
-	// structured v0.2, v0.3
+	// structured v0.2, v0.3, v1.0
 	if v, ok := raw["specversion"]; ok {
 		var version string
 		if err := json.Unmarshal(v, &version); err != nil {

@@ -2,14 +2,15 @@ package http
 
 import (
 	"context"
-	"github.com/cloudevents/sdk-go"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/client"
-	cehttp "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/http"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
-	"github.com/google/uuid"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	cloudevents "github.com/cloudevents/sdk-go"
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/client"
+	cehttp "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/http"
 )
 
 // Loopback Test:
@@ -20,22 +21,9 @@ import (
 // Client is a set to binary or
 
 func AlwaysThen(then time.Time) client.EventDefaulter {
-	return func(event cloudevents.Event) cloudevents.Event {
+	return func(ctx context.Context, event cloudevents.Event) cloudevents.Event {
 		if event.Context != nil {
-			switch event.Context.GetSpecVersion() {
-			case "0.1":
-				ec := event.Context.AsV01()
-				ec.EventTime = &types.Timestamp{Time: then}
-				event.Context = ec
-			case "0.2":
-				ec := event.Context.AsV02()
-				ec.Time = &types.Timestamp{Time: then}
-				event.Context = ec
-			case "0.3":
-				ec := event.Context.AsV03()
-				ec.Time = &types.Timestamp{Time: then}
-				event.Context = ec
-			}
+			_ = event.Context.SetTime(then)
 		}
 		return event
 	}
@@ -85,14 +73,16 @@ func ClientLoopback(t *testing.T, tc TapTest, topts ...cehttp.Option) {
 	recvCtx, recvCancel := context.WithCancel(context.Background())
 
 	go func() {
-		t.Log(ce.StartReceiver(recvCtx, func(resp *cloudevents.EventResponse) {
+		if err := ce.StartReceiver(recvCtx, func(resp *cloudevents.EventResponse) {
 			if tc.resp != nil {
 				resp.RespondWith(200, tc.resp)
 			}
-		}))
+		}); err != nil {
+			t.Log(err)
+		}
 	}()
 
-	got, err := ce.Send(ctx, *tc.event)
+	_, got, err := ce.Send(ctx, *tc.event)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,46 +97,5 @@ func ClientLoopback(t *testing.T, tc TapTest, topts ...cehttp.Option) {
 
 	if resp, ok := tap.resp[testID]; ok {
 		assertTappedEquality(t, "http response", tc.asRecv, &resp)
-	}
-}
-
-// To help with debug, if needed.
-func printTap(t *testing.T, tap *tapHandler, testID string) {
-	if r, ok := tap.req[testID]; ok {
-		t.Log("tap request ", r.URI, r.Method)
-		if r.ContentLength > 0 {
-			t.Log(" .body: ", r.Body)
-		} else {
-			t.Log("tap request had no body.")
-		}
-
-		if len(r.Header) > 0 {
-			for h, vs := range r.Header {
-				for _, v := range vs {
-					t.Logf(" .header %s: %s", h, v)
-				}
-			}
-		} else {
-			t.Log("tap request had no headers.")
-		}
-	}
-
-	if r, ok := tap.resp[testID]; ok {
-		t.Log("tap response.status: ", r.Status)
-		if r.ContentLength > 0 {
-			t.Log(" .body: ", r.Body)
-		} else {
-			t.Log("tap response had no body.")
-		}
-
-		if len(r.Header) > 0 {
-			for h, vs := range r.Header {
-				for _, v := range vs {
-					t.Logf(" .header %s: %s", h, v)
-				}
-			}
-		} else {
-			t.Log("tap response had no headers.")
-		}
 	}
 }

@@ -1,11 +1,12 @@
 package cloudevents_test
 
 import (
+	"strings"
+	"testing"
+
 	ce "github.com/cloudevents/sdk-go/pkg/cloudevents"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 	"github.com/google/go-cmp/cmp"
-	"strings"
-	"testing"
 )
 
 type DataTest struct {
@@ -126,7 +127,7 @@ func TestEventSetData_xml(t *testing.T) {
 			},
 			want: []byte(`<XmlExample><a>42</a><b>true fact</b><c>0.1</c><c>0.2</c><c>0.3</c></XmlExample>`),
 		},
-		"applicaiton/xml": {
+		"application/xml": {
 			event: func(version string) ce.Event {
 				e := ce.New(version)
 				e.SetDataContentType("application/xml")
@@ -139,7 +140,7 @@ func TestEventSetData_xml(t *testing.T) {
 			},
 			want: []byte(`<XmlExample><a>42</a><b>true fact</b><c>0.1</c><c>0.2</c><c>0.3</c></XmlExample>`),
 		},
-		"applicaiton/xml+base64": {
+		"application/xml+base64": {
 			event: func(version string) ce.Event {
 				e := ce.New(version)
 				e.SetDataContentType("application/xml")

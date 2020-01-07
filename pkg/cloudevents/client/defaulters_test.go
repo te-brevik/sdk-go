@@ -1,60 +1,48 @@
 package client
 
 import (
-	"github.com/cloudevents/sdk-go/pkg/cloudevents"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
-	"github.com/google/go-cmp/cmp"
+	"context"
 	"testing"
 	"time"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents"
+	"github.com/google/go-cmp/cmp"
 )
 
-func TestDefaultIDToUUIDIfNotSet(t *testing.T) {
-	testCases := map[string]struct {
-		event cloudevents.Event
-	}{
-		"nil context": {
-			event: cloudevents.Event{},
-		},
-		"v0.1 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV01{},
-			},
-		},
-		"v0.2 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{},
-			},
-		},
-		"v0.3 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{},
-			},
-		},
-		"v0.1 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV01{EventID: "abc"}.AsV01(),
-			},
-		},
-		"v0.2 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV02{ID: "abc"}.AsV02(),
-			},
-		},
-		"v0.3 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV03{ID: "abc"}.AsV03(),
-			},
-		},
-	}
-	for n, tc := range testCases {
-		t.Run(n, func(t *testing.T) {
+var versions = []string{"0.1", "0.2", "0.3", "1.0"}
 
-			got := DefaultIDToUUIDIfNotSet(tc.event)
+func TestDefaultIDToUUIDIfNotSet_empty(t *testing.T) {
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			got := DefaultIDToUUIDIfNotSet(context.TODO(), cloudevents.New(tc))
 
-			if got.Context != nil && got.Context.AsV02().ID == "" {
+			if got.Context != nil && got.ID() == "" {
 				t.Errorf("failed to generate an id for event")
 			}
 		})
+	}
+}
+
+func TestDefaultIDToUUIDIfNotSet_set(t *testing.T) {
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			event := cloudevents.New(tc)
+			event.SetID("abc-123")
+
+			got := DefaultIDToUUIDIfNotSet(context.TODO(), event)
+
+			if got.ID() != "abc-123" {
+				t.Errorf("id was defaulted when already set")
+			}
+		})
+	}
+}
+
+func TestDefaultIDToUUIDIfNotSet_nil(t *testing.T) {
+	got := DefaultIDToUUIDIfNotSet(context.TODO(), cloudevents.Event{})
+
+	if got.Context != nil && got.ID() == "" {
+		t.Errorf("failed to generate time for nil context event")
 	}
 }
 
@@ -63,7 +51,7 @@ func TestDefaultIDToUUIDIfNotSetImmutable(t *testing.T) {
 		Context: &cloudevents.EventContextV01{},
 	}
 
-	got := DefaultIDToUUIDIfNotSet(event)
+	got := DefaultIDToUUIDIfNotSet(context.TODO(), event)
 
 	want := "0.1"
 
@@ -80,53 +68,40 @@ func TestDefaultIDToUUIDIfNotSetImmutable(t *testing.T) {
 	}
 }
 
-func TestDefaultTimeToNowIfNotSet(t *testing.T) {
-	testCases := map[string]struct {
-		event cloudevents.Event
-	}{
-		"nil context": {
-			event: cloudevents.Event{},
-		},
-		"v0.1 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV01{},
-			},
-		},
-		"v0.2 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV02{},
-			},
-		},
-		"v0.3 empty": {
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{},
-			},
-		},
-		"v0.1 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV01{EventTime: &types.Timestamp{Time: time.Now()}}.AsV01(),
-			},
-		},
-		"v0.2 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV02{Time: &types.Timestamp{Time: time.Now()}}.AsV02(),
-			},
-		},
-		"v0.3 no change": {
-			event: cloudevents.Event{
-				Context: cloudevents.EventContextV03{Time: &types.Timestamp{Time: time.Now()}}.AsV03(),
-			},
-		},
-	}
-	for n, tc := range testCases {
-		t.Run(n, func(t *testing.T) {
+func TestDefaultTimeToNowIfNotSet_empty(t *testing.T) {
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			got := DefaultTimeToNowIfNotSet(context.TODO(), cloudevents.New(tc))
 
-			got := DefaultTimeToNowIfNotSet(tc.event)
-
-			if got.Context != nil && got.Context.AsV02().Time.IsZero() {
+			if got.Time().IsZero() {
 				t.Errorf("failed to generate time for event")
 			}
 		})
+	}
+}
+
+func TestDefaultTimeToNowIfNotSet_set(t *testing.T) {
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			event := cloudevents.New(tc)
+			now := time.Now()
+
+			event.SetTime(now)
+
+			got := DefaultTimeToNowIfNotSet(context.TODO(), event)
+
+			if !got.Time().Equal(now) {
+				t.Errorf("time was defaulted when already set")
+			}
+		})
+	}
+}
+
+func TestDefaultTimeToNowIfNotSet_nil(t *testing.T) {
+	got := DefaultTimeToNowIfNotSet(context.TODO(), cloudevents.Event{})
+
+	if got.Context != nil && got.Time().IsZero() {
+		t.Errorf("failed to generate time for nil context event")
 	}
 }
 
@@ -135,7 +110,7 @@ func TestDefaultTimeToNowIfNotSetImmutable(t *testing.T) {
 		Context: &cloudevents.EventContextV01{},
 	}
 
-	got := DefaultTimeToNowIfNotSet(event)
+	got := DefaultTimeToNowIfNotSet(context.TODO(), event)
 
 	want := "0.1"
 
@@ -149,5 +124,36 @@ func TestDefaultTimeToNowIfNotSetImmutable(t *testing.T) {
 
 	if got.Context.AsV01().EventTime.IsZero() {
 		t.Errorf("failed to generate a time for event")
+	}
+}
+
+func TestNewDefaultDataContentTypeIfNotSet_empty(t *testing.T) {
+	ct := "a/b"
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			fn := NewDefaultDataContentTypeIfNotSet(ct)
+			got := fn(context.TODO(), cloudevents.New(tc))
+
+			if got.DataContentType() != ct {
+				t.Errorf("failed to default data content type for event")
+			}
+		})
+	}
+}
+
+func TestNewDefaultDataContentTypeIfNotSet_set(t *testing.T) {
+	ct := "a/b"
+	for _, tc := range versions {
+		t.Run(tc, func(t *testing.T) {
+			event := cloudevents.New(tc)
+			event.SetDataContentType(ct)
+
+			fn := NewDefaultDataContentTypeIfNotSet("b/c")
+			got := fn(context.TODO(), event)
+
+			if got.DataContentType() != ct {
+				t.Errorf("failed to preserve data content type for event")
+			}
+		})
 	}
 }

@@ -1,11 +1,14 @@
 package http
 
 import (
-	"github.com/cloudevents/sdk-go"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	cloudevents "github.com/cloudevents/sdk-go"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 var (
@@ -19,14 +22,34 @@ var (
 	}
 )
 
-func assertEventEquality(t *testing.T, ctx string, expected, actual *cloudevents.Event) {
-	if diff := cmp.Diff(expected, actual, cmpopts.IgnoreFields(cloudevents.Event{}, "Data", "DataEncoded")); diff != "" {
+func toBytes(body map[string]interface{}) []byte {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return []byte(fmt.Sprintf(`{"error":%q}`, err.Error()))
+	}
+	return b
+}
+
+func assertEventEqualityExact(t *testing.T, ctx string, expected, actual *cloudevents.Event) {
+	if diff := cmp.Diff(expected, actual, cmpopts.IgnoreFields(cloudevents.Event{}, "Data", "DataEncoded", "DataBinary")); diff != "" {
 		t.Errorf("Unexpected difference in %s (-want, +got): %v", ctx, diff)
 	}
 	if expected == nil || actual == nil {
 		return
 	}
-	data := make(map[string]string, 0)
+	if diff := cmp.Diff(expected.Data, actual.Data); diff != "" {
+		t.Errorf("Unexpected data difference in %s (-want, +got): %v", ctx, diff)
+	}
+}
+
+func assertEventEquality(t *testing.T, ctx string, expected, actual *cloudevents.Event) {
+	if diff := cmp.Diff(expected, actual, cmpopts.IgnoreFields(cloudevents.Event{}, "Data", "DataEncoded", "DataBinary")); diff != "" {
+		t.Errorf("Unexpected difference in %s (-want, +got): %v", ctx, diff)
+	}
+	if expected == nil || actual == nil {
+		return
+	}
+	data := make(map[string]string)
 	err := actual.DataAs(&data)
 	if err != nil {
 		t.Error(err)
@@ -38,7 +61,7 @@ func assertEventEquality(t *testing.T, ctx string, expected, actual *cloudevents
 
 func assertTappedEquality(t *testing.T, ctx string, expected, actual *TapValidation) {
 	canonicalizeHeaders(expected, actual)
-	if diff := cmp.Diff(expected, actual); diff != "" {
+	if diff := cmp.Diff(expected, actual, cmpopts.IgnoreFields(TapValidation{}, "ContentLength")); diff != "" {
 		t.Errorf("Unexpected difference in %s (-want, +got): %v", ctx, diff)
 	}
 }

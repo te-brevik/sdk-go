@@ -4,10 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/client"
-	cehttp "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/http"
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +11,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents"
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/client"
+	cehttp "github.com/cloudevents/sdk-go/pkg/cloudevents/transport/http"
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -95,7 +96,6 @@ func TestClientSend(t *testing.T) {
 					"ce-eventtime":          {now.UTC().Format(time.RFC3339Nano)},
 					"ce-eventtype":          {"unit.test.client"},
 					"ce-source":             {"/unit/test/client"},
-					"content-type":          {"application/json"},
 				},
 				Body: `{"msg":"hello","sq":42}`,
 			},
@@ -124,7 +124,6 @@ func TestClientSend(t *testing.T) {
 					"ce-time":        {now.UTC().Format(time.RFC3339Nano)},
 					"ce-type":        {"unit.test.client"},
 					"ce-source":      {"/unit/test/client"},
-					"content-type":   {"application/json"},
 				},
 				Body: `{"msg":"hello","sq":42}`,
 			},
@@ -153,7 +152,6 @@ func TestClientSend(t *testing.T) {
 					"ce-time":        {now.UTC().Format(time.RFC3339Nano)},
 					"ce-type":        {"unit.test.client"},
 					"ce-source":      {"/unit/test/client"},
-					"content-type":   {"application/json"},
 				},
 				Body: `{"msg":"hello","sq":42}`,
 			},
@@ -179,7 +177,7 @@ func TestClientSend(t *testing.T) {
 				Headers: map[string][]string{
 					"content-type": {"application/cloudevents+json"},
 				},
-				Body: fmt.Sprintf(`{"cloudEventsVersion":"0.1","contentType":"application/json","data":{"msg":"hello","sq":42},"eventID":"AABBCCDDEE","eventTime":%q,"eventType":"unit.test.client","source":"/unit/test/client"}`,
+				Body: fmt.Sprintf(`{"cloudEventsVersion":"0.1","data":{"msg":"hello","sq":42},"eventID":"AABBCCDDEE","eventTime":%q,"eventType":"unit.test.client","source":"/unit/test/client"}`,
 					now.UTC().Format(time.RFC3339Nano),
 				),
 			},
@@ -205,7 +203,7 @@ func TestClientSend(t *testing.T) {
 				Headers: map[string][]string{
 					"content-type": {"application/cloudevents+json"},
 				},
-				Body: fmt.Sprintf(`{"contenttype":"application/json","data":{"msg":"hello","sq":42},"id":"AABBCCDDEE","source":"/unit/test/client","specversion":"0.2","time":%q,"type":"unit.test.client"}`,
+				Body: fmt.Sprintf(`{"data":{"msg":"hello","sq":42},"id":"AABBCCDDEE","source":"/unit/test/client","specversion":"0.2","time":%q,"type":"unit.test.client"}`,
 					now.UTC().Format(time.RFC3339Nano),
 				),
 			},
@@ -231,7 +229,7 @@ func TestClientSend(t *testing.T) {
 				Headers: map[string][]string{
 					"content-type": {"application/cloudevents+json"},
 				},
-				Body: fmt.Sprintf(`{"data":{"msg":"hello","sq":42},"datacontenttype":"application/json","id":"AABBCCDDEE","source":"/unit/test/client","specversion":"0.3","time":%q,"type":"unit.test.client"}`,
+				Body: fmt.Sprintf(`{"data":{"msg":"hello","sq":42},"id":"AABBCCDDEE","source":"/unit/test/client","specversion":"0.3","time":%q,"type":"unit.test.client"}`,
 					now.UTC().Format(time.RFC3339Nano),
 				),
 			},
@@ -249,7 +247,7 @@ func TestClientSend(t *testing.T) {
 
 			c := tc.c(server.URL)
 
-			_, err := c.Send(context.TODO(), tc.event) // TODO: update test with new returned event
+			_, _, err := c.Send(context.TODO(), tc.event) // TODO: update test with new returned event and returned context
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("failed to return expected error, got nil")
@@ -458,9 +456,6 @@ func TestClientReceive(t *testing.T) {
 			},
 		},
 	}
-
-	type startFn func(events chan cloudevents.Event, opts ...client.Option) (context.Context, client.Client, error)
-
 	for n, tc := range testCases {
 		for _, path := range []string{"", "/", "/unittest/"} {
 			t.Run(n+" at path "+path, func(t *testing.T) {
@@ -597,12 +592,12 @@ func (f *fakeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(f.response.StatusCode)
 		var buf bytes.Buffer
 		if f.response.ContentLength > 0 {
-			buf.ReadFrom(f.response.Body)
-			w.Write(buf.Bytes())
+			_, _ = buf.ReadFrom(f.response.Body)
+			_, _ = w.Write(buf.Bytes())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(""))
+		_, _ = w.Write([]byte(""))
 	}
 }
 

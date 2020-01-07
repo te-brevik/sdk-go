@@ -1,15 +1,17 @@
 package pubsub_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/cloudevents/sdk-go/pkg/cloudevents"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/transport/pubsub"
 	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
 	"github.com/google/go-cmp/cmp"
-	"net/url"
-	"testing"
-	"time"
 )
 
 func strptr(s string) *string {
@@ -21,20 +23,20 @@ func TestCodecEncode(t *testing.T) {
 	source := &types.URLRef{URL: *sourceUrl}
 
 	testCases := map[string]struct {
-		codec   pubsub.Codec
-		event   cloudevents.Event
+		codec   *pubsub.Codec
+		event   *cloudevents.Event
 		want    *pubsub.Message
 		wantErr error
 	}{
 		"simple v03 structured": {
-			codec: pubsub.Codec{Encoding: pubsub.StructuredV03},
-			event: cloudevents.Event{
-				Context: &cloudevents.EventContextV03{
+			codec: &pubsub.Codec{Encoding: pubsub.StructuredV03},
+			event: &cloudevents.Event{
+				Context: cloudevents.EventContextV03{
 					Type:    "com.example.test",
 					Source:  *source,
 					ID:      "ABC-123",
 					Subject: strptr("a-subject"),
-				},
+				}.AsV03(),
 			},
 			want: &pubsub.Message{
 				Attributes: map[string]string{
@@ -42,20 +44,19 @@ func TestCodecEncode(t *testing.T) {
 				},
 				Data: func() []byte {
 					body := map[string]interface{}{
-						"datacontenttype": "application/json",
-						"specversion":     "0.3",
-						"id":              "ABC-123",
-						"type":            "com.example.test",
-						"source":          "http://example.com/source",
-						"subject":         "a-subject",
+						"specversion": "0.3",
+						"id":          "ABC-123",
+						"type":        "com.example.test",
+						"source":      "http://example.com/source",
+						"subject":     "a-subject",
 					}
 					return toBytes(body)
 				}(),
 			},
 		},
 		"simple v03 binary": {
-			codec: pubsub.Codec{Encoding: pubsub.BinaryV03},
-			event: cloudevents.Event{
+			codec: &pubsub.Codec{Encoding: pubsub.BinaryV03},
+			event: &cloudevents.Event{
 				Context: &cloudevents.EventContextV03{
 					Type:    "com.example.test",
 					Source:  *source,
@@ -78,7 +79,7 @@ func TestCodecEncode(t *testing.T) {
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Encode(tc.event)
+			got, err := tc.codec.Encode(context.TODO(), *tc.event)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {
@@ -108,13 +109,13 @@ func TestCodecDecode(t *testing.T) {
 	source := &types.URLRef{URL: *sourceUrl}
 
 	testCases := map[string]struct {
-		codec   pubsub.Codec
+		codec   *pubsub.Codec
 		msg     *pubsub.Message
 		want    *cloudevents.Event
 		wantErr error
 	}{
 		"simple v3 structured": {
-			codec: pubsub.Codec{Encoding: pubsub.StructuredV03},
+			codec: &pubsub.Codec{Encoding: pubsub.StructuredV03},
 			msg: &pubsub.Message{
 				Attributes: map[string]string{
 					"Content-Type": cloudevents.ApplicationCloudEventsJSON,
@@ -138,14 +139,13 @@ func TestCodecDecode(t *testing.T) {
 					ID:          "ABC-123",
 					Subject:     strptr("a-subject"),
 				},
-				DataEncoded: true,
 			},
 		},
 	}
 	for n, tc := range testCases {
 		t.Run(n, func(t *testing.T) {
 
-			got, err := tc.codec.Decode(tc.msg)
+			got, err := tc.codec.Decode(context.TODO(), tc.msg)
 
 			if tc.wantErr != nil || err != nil {
 				if diff := cmp.Diff(tc.wantErr, err); diff != "" {
@@ -176,31 +176,30 @@ func TestCodecAsMiddleware(t *testing.T) {
 	for _, encoding := range []pubsub.Encoding{pubsub.StructuredV03} {
 
 		testCases := map[string]struct {
-			codec   pubsub.Codec
-			event   cloudevents.Event
-			want    cloudevents.Event
+			codec   *pubsub.Codec
+			event   *cloudevents.Event
+			want    *cloudevents.Event
 			wantErr error
 		}{
 			"simple data": {
-				codec: pubsub.Codec{Encoding: encoding},
-				event: cloudevents.Event{
-					Context: &cloudevents.EventContextV03{
+				codec: &pubsub.Codec{Encoding: encoding},
+				event: &cloudevents.Event{
+					Context: cloudevents.EventContextV03{
 						Type:   "com.example.test",
 						Source: *source,
 						ID:     "ABC-123",
-					},
+					}.AsV03(),
 					Data: map[string]string{
 						"a": "apple",
 						"b": "banana",
 					},
 				},
-				want: cloudevents.Event{
+				want: &cloudevents.Event{
 					Context: &cloudevents.EventContextV03{
-						SpecVersion:     cloudevents.CloudEventsVersionV03,
-						Type:            "com.example.test",
-						Source:          *source,
-						ID:              "ABC-123",
-						DataContentType: cloudevents.StringOfApplicationJSON(),
+						SpecVersion: cloudevents.CloudEventsVersionV03,
+						Type:        "com.example.test",
+						Source:      *source,
+						ID:          "ABC-123",
 					},
 					Data: map[string]interface{}{
 						"a": "apple",
@@ -210,25 +209,24 @@ func TestCodecAsMiddleware(t *testing.T) {
 				},
 			},
 			"struct data": {
-				codec: pubsub.Codec{Encoding: encoding},
-				event: cloudevents.Event{
-					Context: &cloudevents.EventContextV03{
+				codec: &pubsub.Codec{Encoding: encoding},
+				event: &cloudevents.Event{
+					Context: cloudevents.EventContextV03{
 						Type:   "com.example.test",
 						Source: *source,
 						ID:     "ABC-123",
-					},
+					}.AsV03(),
 					Data: DataExample{
 						AnInt:   42,
 						AString: "testing",
 					},
 				},
-				want: cloudevents.Event{
+				want: &cloudevents.Event{
 					Context: &cloudevents.EventContextV03{
-						SpecVersion:     cloudevents.CloudEventsVersionV03,
-						Type:            "com.example.test",
-						Source:          *source,
-						ID:              "ABC-123",
-						DataContentType: cloudevents.StringOfApplicationJSON(),
+						SpecVersion: cloudevents.CloudEventsVersionV03,
+						Type:        "com.example.test",
+						Source:      *source,
+						ID:          "ABC-123",
 					},
 					Data: &DataExample{
 						AnInt:   42,
@@ -242,7 +240,7 @@ func TestCodecAsMiddleware(t *testing.T) {
 			n = fmt.Sprintf("%s, %s", encoding, n)
 			t.Run(n, func(t *testing.T) {
 
-				msg1, err := tc.codec.Encode(tc.event)
+				msg1, err := tc.codec.Encode(context.TODO(), *tc.event)
 				if err != nil {
 					if diff := cmp.Diff(tc.wantErr, err); diff != "" {
 						t.Errorf("unexpected error (-want, +got) = %v", diff)
@@ -250,7 +248,7 @@ func TestCodecAsMiddleware(t *testing.T) {
 					return
 				}
 
-				midEvent, err := tc.codec.Decode(msg1)
+				midEvent, err := tc.codec.Decode(context.TODO(), msg1)
 				if err != nil {
 					if diff := cmp.Diff(tc.wantErr, err); diff != "" {
 						t.Errorf("unexpected error (-want, +got) = %v", diff)
@@ -258,7 +256,7 @@ func TestCodecAsMiddleware(t *testing.T) {
 					return
 				}
 
-				msg2, err := tc.codec.Encode(*midEvent)
+				msg2, err := tc.codec.Encode(context.TODO(), *midEvent)
 				if err != nil {
 					if diff := cmp.Diff(tc.wantErr, err); diff != "" {
 						t.Errorf("unexpected error (-want, +got) = %v", diff)
@@ -266,7 +264,7 @@ func TestCodecAsMiddleware(t *testing.T) {
 					return
 				}
 
-				got, err := tc.codec.Decode(msg2)
+				got, err := tc.codec.Decode(context.TODO(), msg2)
 				if err != nil {
 					if diff := cmp.Diff(tc.wantErr, err); diff != "" {
 						t.Errorf("unexpected error (-want, +got) = %v", diff)
@@ -290,12 +288,11 @@ func TestCodecAsMiddleware(t *testing.T) {
 				ctxv3 := got.Context.AsV03()
 				got.Context = ctxv3
 
-				if diff := cmp.Diff(tc.want, *got); diff != "" {
+				if diff := cmp.Diff(tc.want, got); diff != "" {
 					t.Errorf("unexpected event (-want, +got) = %v", diff)
 				}
 			})
 		}
-
 	}
 }
 

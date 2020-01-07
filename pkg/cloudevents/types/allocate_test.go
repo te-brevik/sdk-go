@@ -1,10 +1,11 @@
 package types_test
 
 import (
-	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
-	"github.com/google/go-cmp/cmp"
 	"testing"
 	"time"
+
+	"github.com/cloudevents/sdk-go/pkg/cloudevents/types"
+	"github.com/google/go-cmp/cmp"
 )
 
 type DataExample struct {
@@ -63,10 +64,9 @@ func TestAllocate(t *testing.T) {
 		},
 	}
 	for n, tc := range testCases {
+		tc := tc // Don't use range variable in func literal.
 		t.Run(n, func(t *testing.T) {
-
 			got, _ := types.Allocate(tc.obj)
-
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("unexpected object (-want, +got) = %v", diff)
 			}
